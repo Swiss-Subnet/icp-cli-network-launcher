@@ -10,27 +10,29 @@ icp-cli-network-launcher --gateway-port=4943
 icp-cli-network-launcher --gateway-port=4943 --bitcoind-addr=127.0.0.1:18444
 ```
 
-The CLI interface is stable across PocketIC releases. The downloadable package contains both the launcher and the PocketIC binary it supports. One launcher version is tied to one PocketIC version — if the PocketIC version is a published release, the launcher version matches (e.g. `10.0.0`); if it's a git hash, it's added as a tag (e.g. `10.0.0+97ad9167`). The launcher expects the `pocket-ic` binary in the same directory.
+The CLI interface is stable across releases of PocketIC (see [SPEC.md](./SPEC.md)), and the primary way `pocket-ic` is installed for use with `icp-cli` is by installing `icp-cli-network-launcher`. The downloadable package contains both the launcher and the `pocket-ic` binary it supports.
+
+One launcher version is tied to one PocketIC version — if the PocketIC version is a published release, the launcher version matches (e.g. `10.0.0`); if it's a git hash, it's added as a tag (e.g. `10.0.0+97ad9167`). The launcher expects the `pocket-ic` binary in the same directory.
 
 ## CLI Reference
 
 ### Flags
 
-| Flag | Type | Description |
-|------|------|-------------|
-| `--gateway-port` | integer | Port for the HTTP gateway (ICP API). Random if not set. |
-| `--config-port` | integer | Port for the PocketIC admin interface. Random if not set. |
-| `--bind` | IP address | Network interface to bind the PocketIC server on. |
-| `--state-dir` | path | Directory to persist PocketIC state across restarts. Ephemeral if not set. |
-| `--artificial-delay-ms` | integer | Artificial delay for update call execution (ms). |
-| `--subnet` | enum | Subnet to add. Can be specified multiple times. See [Subnet Configuration](#subnet-configuration). |
-| `--bitcoind-addr` | host:port | Bitcoin P2P node address. Can be specified multiple times. See [Bitcoin/Dogecoin](#bitcoin-and-dogecoin-integration). |
-| `--dogecoind-addr` | host:port | Dogecoin P2P node address. Can be specified multiple times. See [Bitcoin/Dogecoin](#bitcoin-and-dogecoin-integration). |
-| `--ii` | flag | Enable Internet Identity. See [Internet Identity](#internet-identity). |
-| `--nns` | flag | Enable NNS and SNS. See [NNS](#nns). |
-| `--interface-version` | semver | Expected CLI interface version. Also read from `ICP_CLI_NETWORK_LAUNCHER_INTERFACE_VERSION` env var. Used by automated setups. |
-| `--status-dir` | path | Directory to write the [status file](#status-file) to. Used by automated setups. |
-| `--verbose` | flag | Enable verbose logging from PocketIC. |
+| Flag                    | Type       | Description                                                                                                                    |
+|-------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `--gateway-port`        | integer    | Port for the HTTP gateway (ICP API). Random if not set.                                                                        |
+| `--config-port`         | integer    | Port for the PocketIC admin interface. Random if not set.                                                                      |
+| `--bind`                | IP address | Network interface to bind the PocketIC server on.                                                                              |
+| `--state-dir`           | path       | Directory to persist PocketIC state across restarts. Ephemeral if not set.                                                     |
+| `--artificial-delay-ms` | integer    | Artificial delay for update call execution (ms).                                                                               |
+| `--subnet`              | enum       | Subnet to add. Can be specified multiple times. See [Subnet Configuration](#subnet-configuration).                             |
+| `--bitcoind-addr`       | host:port  | Bitcoin P2P node address. Can be specified multiple times. See [Bitcoin/Dogecoin](#bitcoin-and-dogecoin-integration).          |
+| `--dogecoind-addr`      | host:port  | Dogecoin P2P node address. Can be specified multiple times. See [Bitcoin/Dogecoin](#bitcoin-and-dogecoin-integration).         |
+| `--ii`                  | flag       | Enable Internet Identity. See [Internet Identity](#internet-identity).                                                         |
+| `--nns`                 | flag       | Enable NNS and SNS. See [NNS](#nns).                                                                                           |
+| `--interface-version`   | semver     | Expected CLI interface version. Also read from `ICP_CLI_NETWORK_LAUNCHER_INTERFACE_VERSION` env var. Used by automated setups. |
+| `--status-dir`          | path       | Directory to write the [status file](#status-file) to. Used by automated setups.                                               |
+| `--verbose`             | flag       | Enable verbose logging from PocketIC.                                                                                          |
 
 ### Subnet Configuration
 
@@ -104,16 +106,16 @@ icp-cli-network-launcher --bitcoind-addr=127.0.0.1:18444 --bitcoind-addr=192.168
 
 The following table summarizes the subnets created for common configurations. An NNS subnet is always present.
 
-| Configuration | Subnets created |
-|--------------|----------------|
-| *(no flags)* | application, NNS |
-| `--ii` | application, NNS, II |
-| `--nns` | application, NNS, II, SNS |
-| `--bitcoind-addr=...` | application, NNS, bitcoin, II |
-| `--dogecoind-addr=...` | application, NNS, bitcoin, II |
-| `--subnet=system` | system, NNS |
-| `--subnet=system --bitcoind-addr=...` | system, NNS, bitcoin, II |
-| `--nns --subnet=system` | system, NNS, II, SNS |
+| Configuration                         | Subnets created               |
+|---------------------------------------|-------------------------------|
+| *(no flags)*                          | application, NNS              |
+| `--ii`                                | application, NNS, II          |
+| `--nns`                               | application, NNS, II, SNS     |
+| `--bitcoind-addr=...`                 | application, NNS, bitcoin, II |
+| `--dogecoind-addr=...`                | application, NNS, bitcoin, II |
+| `--subnet=system`                     | system, NNS                   |
+| `--subnet=system --bitcoind-addr=...` | system, NNS, bitcoin, II      |
+| `--nns --subnet=system`               | system, NNS, II, SNS          |
 
 **Key points:**
 - Specifying any `--subnet` flag replaces the default application subnet. Add `--subnet=application` explicitly if you still need it.
@@ -124,18 +126,24 @@ The following table summarizes the subnets created for common configurations. An
 
 When `--status-dir` is provided, the launcher writes a JSON status file (`status.json`) to the specified directory once the network is ready. This is used by `icp-cli` and other automated setups to discover the running network.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `v` | string | Status file format version. Currently `"1"`. |
-| `gateway_port` | number | Port where the HTTP gateway (ICP API) is listening. |
-| `root_key` | string | Hex-encoded root key of the network. |
-| `config_port` | number | Port of the PocketIC admin interface. |
-| `instance_id` | number | PocketIC instance ID. |
+| Field                           | Type   | Description                                                            |
+|---------------------------------|--------|------------------------------------------------------------------------|
+| `v`                             | string | Status file format version. Currently `"1"`.                           |
+| `gateway_port`                  | number | Port where the HTTP gateway (ICP API) is listening.                    |
+| `root_key`                      | string | Hex-encoded root key of the network.                                   |
+| `config_port`                   | number | Port of the PocketIC admin interface.                                  |
+| `instance_id`                   | number | PocketIC instance ID.                                                  |
 | `default_effective_canister_id` | string | Default effective canister ID for provisional canister creation calls. |
 
 ### Shutdown
 
 The launcher handles `SIGINT` (Ctrl+C) and `SIGTERM` for graceful shutdown. It stops the PocketIC server and waits for it to exit before terminating.
+
+## Installing
+
+`icp-cli-network-launcher` is typically installed automatically by icp-cli. It can be updated to the latest version with `icp network update`.
+
+Binary downloads are also available on the [releases page](https://github.com/dfinity/icp-cli-network-launcher/releases).
 
 ## Development
 
