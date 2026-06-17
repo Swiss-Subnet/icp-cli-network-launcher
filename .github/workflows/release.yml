@@ -112,12 +112,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ghcr repository names must be lowercase; github.repository may contain uppercase.
+      - name: "Lowercase image name"
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: "Docker metadata"
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
           images: |
-            ghcr.io/${{ github.repository }}
+            ${{ env.IMAGE }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -143,10 +147,10 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
           tags: |
-            ghcr.io/${{ github.repository }}:${{ matrix.arch_tag }}
+            ${{ env.IMAGE }}:${{ matrix.arch_tag }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:${{ matrix.cache_suffix }}
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:${{ matrix.cache_suffix }},mode=max,platform=${{ matrix.platform }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:${{ matrix.cache_suffix }}
+          cache-to: type=registry,ref=${{ env.IMAGE }}:${{ matrix.cache_suffix }},mode=max,platform=${{ matrix.platform }}
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
@@ -181,12 +185,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ghcr repository names must be lowercase; github.repository may contain uppercase.
+      - name: "Lowercase image name"
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: "Docker metadata"
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
           images: |
-            ghcr.io/${{ github.repository }}
+            ${{ env.IMAGE }}
           tags: ${{ matrix.tags }}
 
       - name: "Log in to GitHub Container Registry"
@@ -201,5 +209,5 @@ jobs:
         with:
           tags: ${{ steps.meta.outputs.tags }}
           sources: |
-            ghcr.io/${{ github.repository }}:${{ matrix.amd64_tag }}
-            ghcr.io/${{ github.repository }}:${{ matrix.arm64_tag }}
+            ${{ env.IMAGE }}:${{ matrix.amd64_tag }}
+            ${{ env.IMAGE }}:${{ matrix.arm64_tag }}

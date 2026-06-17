@@ -33,6 +33,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ inputs.tag }}" --repo "${{ github.repository }}" --latest
 
+      # ghcr repository names must be lowercase; github.repository may contain uppercase.
+      - name: Lowercase image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
@@ -43,11 +47,11 @@ jobs:
       - name: Promote standard image to :latest
         run: |
           docker buildx imagetools create \
-            -t ghcr.io/${{ github.repository }}:latest \
-            ghcr.io/${{ github.repository }}:${{ steps.ver.outputs.version }}
+            -t ${{ env.IMAGE }}:latest \
+            ${{ env.IMAGE }}:${{ steps.ver.outputs.version }}
 
       - name: Promote engine image to :engine-beta
         run: |
           docker buildx imagetools create \
-            -t ghcr.io/${{ github.repository }}:engine-beta \
-            ghcr.io/${{ github.repository }}:${{ steps.ver.outputs.version }}-engine
+            -t ${{ env.IMAGE }}:engine-beta \
+            ${{ env.IMAGE }}:${{ steps.ver.outputs.version }}-engine
