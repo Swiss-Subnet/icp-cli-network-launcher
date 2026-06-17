@@ -59,11 +59,11 @@ elif [[ "$suffix" =~ ^(r[0-9]+)$ ]]; then
 elif [[ "$suffix" =~ ^([0-9a-f]{40})(-(r[0-9]+))?$ ]]; then
     githash=${BASH_REMATCH[1]}
     patchrel=${BASH_REMATCH[3]:-}
-elif [[ "$suffix" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2})(\.(r[0-9]+))?$ ]]; then
+elif [[ "$suffix" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2})(\.((r|ssn)[0-9]+))?$ ]]; then
     icdate=${BASH_REMATCH[1]}
     patchrel=${BASH_REMATCH[3]:-}
 else
-    die "could not parse package version $v - expected 1.2.3[-r1], 1.2.3-2026-01-29-16-08[.r1], or 1.2.3-<git-hash>[-r1]"
+    die "could not parse package version $v - expected 1.2.3[-r1], 1.2.3-2026-01-29-16-08[.r1|.ssn1], or 1.2.3-<git-hash>[-r1]"
 fi
 if [[ -n "$icdate" || -n "$githash" || -n "$patchrel" ]]; then
     [[ "$source" = "git+"* ]] || die "package.version is patch but pocket-ic dependency is not git"

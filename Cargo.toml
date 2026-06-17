@@ -1,6 +1,6 @@
 [package]
 name = "icp-cli-network-launcher"
-version = "14.0.0-2026-06-12-04-52"
+version = "14.0.0-2026-06-12-04-52.ssn1"
 edition = "2024"
 authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
 license = "Apache-2.0"
@@ -26,3 +26,6 @@ tokio = { version = "1.48.0", features = ["full"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.30.1", features = ["fs"] }
+
+[dev-dependencies]
+candid = "0.10"

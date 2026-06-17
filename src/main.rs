@@ -17,8 +17,8 @@ use notify::{Event, RecursiveMode, Watcher, recommended_watcher};
 use pocket_ic::{
     PocketIcBuilder,
     common::rest::{
-        AutoProgressConfig, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
-        InstanceHttpGatewayConfig, SubnetSpec,
+        AutoProgressConfig, CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, IcpFeatures,
+        IcpFeaturesConfig, InstanceHttpGatewayConfig, SubnetSpec,
     },
 };
 use reqwest::Client;
@@ -53,8 +53,13 @@ struct Cli {
     /// Artificial delay for execution, in milliseconds.
     #[arg(long)]
     artificial_delay_ms: Option<u64>,
-    /// List of workload subnets to create. Defaults to `--subnet=application` when none are specified. The NNS, fiduciary, and test-threshold-keys subnets are always created regardless of this flag.
-    #[arg(long, value_enum, action = ArgAction::Append)]
+    /// List of workload subnets to create. Defaults to `--subnet=application` when none are
+    /// specified. Valid kinds: `application`, `system`, `verified-application`, `bitcoin`, `sns`.
+    /// `application:rental[=<principal>[,<principal>...]]` creates an application subnet modeling a
+    /// rental subnet: cost schedule Free, and the listed principals registered as the subnet's
+    /// `SubnetRecord.subnet_admins` (granting management authority such as `canister_metrics`).
+    /// The NNS, fiduciary, and test-threshold-keys subnets are always created regardless of this flag.
+    #[arg(long, value_parser = parse_subnet_kind, action = ArgAction::Append)]
     subnet: Vec<SubnetKind>,
     /// Addresses of bitcoind nodes to connect to (e.g. 127.0.0.1:18444 or bitcoind:18444).
     /// Implies `--subnet=bitcoin`.
@@ -97,9 +102,12 @@ struct Cli {
     unknown_args: Vec<String>,
 }
 
-#[derive(ValueEnum, Clone)]
+#[derive(Clone)]
 enum SubnetKind {
     Application,
+    /// An application subnet modeling a rental subnet: cost schedule Free and the given principals
+    /// (possibly empty) registered as `SubnetRecord.subnet_admins`.
+    ApplicationRental(Vec<Principal>),
     System,
     VerifiedApplication,
     Bitcoin,
@@ -110,6 +118,42 @@ enum SubnetKind {
     Fiduciary,
     #[cfg(feature = "cloud-engine")]
     CloudEngine,
+}
+
+/// Parses a `--subnet` value. Plain kinds map directly; `application:rental` optionally carries a
+/// comma-separated admin principal list as `application:rental=<p>[,<p>...]` (the list may be empty
+/// or omitted).
+fn parse_subnet_kind(value: &str) -> Result<SubnetKind, String> {
+    if let Some(rest) = value.strip_prefix("application:rental") {
+        let admins = match rest {
+            "" => Vec::new(),
+            _ => {
+                let list = rest.strip_prefix('=').ok_or_else(|| {
+                    format!("invalid rental subnet spec '{value}': expected 'application:rental' or 'application:rental=<principal>[,...]'")
+                })?;
+                list.split(',')
+                    .filter(|p| !p.is_empty())
+                    .map(|p| {
+                        Principal::from_text(p)
+                            .map_err(|e| format!("invalid principal '{p}' in '{value}': {e}"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            }
+        };
+        return Ok(SubnetKind::ApplicationRental(admins));
+    }
+    match value {
+        "application" => Ok(SubnetKind::Application),
+        "system" => Ok(SubnetKind::System),
+        "verified-application" => Ok(SubnetKind::VerifiedApplication),
+        "bitcoin" => Ok(SubnetKind::Bitcoin),
+        "sns" => Ok(SubnetKind::Sns),
+        "nns" => Ok(SubnetKind::Nns),
+        "fiduciary" => Ok(SubnetKind::Fiduciary),
+        #[cfg(feature = "cloud-engine")]
+        "cloud-engine" => Ok(SubnetKind::CloudEngine),
+        other => Err(format!("unknown subnet kind '{other}'")),
+    }
 }
 
 #[tokio::main]
@@ -234,13 +278,35 @@ async fn main() -> anyhow::Result<()> {
             .filter(|s| matches!(s, SubnetKind::CloudEngine))
             .count()
         {
-            use pocket_ic::common::rest::CanisterCyclesCostSchedule;
-
             base_subnets.cloud_engine.push(
                 SubnetSpec::default()
                     .with_subnet_admins(vec![Principal::anonymous()])
                     .with_cost_schedule(CanisterCyclesCostSchedule::Free),
             );
+        }
+        // Application subnets are pushed directly onto the config rather than via
+        // PocketIcBuilder::with_application_subnet() so rental subnets can carry subnet_admins and
+        // a Free cost schedule. with_application_subnet() only pushes a SubnetSpec::default().
+        // With no --subnet at all, a single plain application subnet is created.
+        if subnet.is_empty() {
+            base_subnets.application.push(SubnetSpec::default());
+        } else {
+            for kind in &subnet {
+                match kind {
+                    SubnetKind::Application => {
+                        base_subnets.application.push(SubnetSpec::default());
+                    }
+                    SubnetKind::ApplicationRental(admins) => {
+                        let mut spec = SubnetSpec::default()
+                            .with_cost_schedule(CanisterCyclesCostSchedule::Free);
+                        if !admins.is_empty() {
+                            spec = spec.with_subnet_admins(admins.clone());
+                        }
+                        base_subnets.application.push(spec);
+                    }
+                    _ => {}
+                }
+            }
         }
         let mut pic = PocketIcBuilder::new_with_config(base_subnets)
             .with_server_url(
@@ -276,24 +342,22 @@ async fn main() -> anyhow::Result<()> {
         // (ECDSA, Schnorr, VetKd). As of pocket-ic 14.0.0 these keys are no longer held by
         // the II or fiduciary subnets.
         pic = pic.with_test_threshold_keys_subnet();
-        // Workload subnets selected via --subnet. With no --subnet, a single application
-        // subnet is created.
-        if subnet.is_empty() {
-            pic = pic.with_application_subnet();
-        } else {
-            for subnet in subnet {
-                match subnet {
-                    SubnetKind::Application => pic = pic.with_application_subnet(),
-                    SubnetKind::System => pic = pic.with_system_subnet(),
-                    SubnetKind::VerifiedApplication => pic = pic.with_verified_application_subnet(),
-                    SubnetKind::Bitcoin => pic = pic.with_bitcoin_subnet(),
-                    SubnetKind::Sns => pic = pic.with_sns_subnet(),
-                    // Part of the always-on base topology above; accepted for backward
-                    // compatibility but ignored here.
-                    SubnetKind::Nns | SubnetKind::Fiduciary => {}
-                    #[cfg(feature = "cloud-engine")]
-                    SubnetKind::CloudEngine => {} // handled above
-                }
+        // Workload subnets selected via --subnet. Application subnets (and the no-flag
+        // default of one) are configured above on `base_subnets.application` so they can
+        // carry subnet_admins / cost schedule; only the remaining kinds are added here.
+        for subnet in subnet {
+            match subnet {
+                SubnetKind::System => pic = pic.with_system_subnet(),
+                SubnetKind::VerifiedApplication => pic = pic.with_verified_application_subnet(),
+                SubnetKind::Bitcoin => pic = pic.with_bitcoin_subnet(),
+                SubnetKind::Sns => pic = pic.with_sns_subnet(),
+                // Handled on base_subnets.application above.
+                SubnetKind::Application | SubnetKind::ApplicationRental(_) => {}
+                // Part of the always-on base topology above; accepted for backward
+                // compatibility but ignored here.
+                SubnetKind::Nns | SubnetKind::Fiduciary => {}
+                #[cfg(feature = "cloud-engine")]
+                SubnetKind::CloudEngine => {} // handled above
             }
         }
         // --bitcoind-addr and --dogecoind-addr imply --subnet=bitcoin
@@ -561,4 +625,66 @@ struct Status {
     root_key: String,
     default_effective_canister_id: Principal,
     supported_features: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn admins(value: &str) -> Vec<Principal> {
+        match parse_subnet_kind(value).unwrap() {
+            SubnetKind::ApplicationRental(admins) => admins,
+            _ => panic!("expected ApplicationRental for {value:?}"),
+        }
+    }
+
+    #[test]
+    fn plain_application() {
+        assert!(matches!(
+            parse_subnet_kind("application").unwrap(),
+            SubnetKind::Application
+        ));
+    }
+
+    #[test]
+    fn rental_without_admins() {
+        assert!(admins("application:rental").is_empty());
+        // Trailing '=' with no principals is also empty.
+        assert!(admins("application:rental=").is_empty());
+    }
+
+    #[test]
+    fn rental_with_admins() {
+        let anon = Principal::anonymous();
+        let mgmt = Principal::management_canister();
+        assert_eq!(admins(&format!("application:rental={anon}")), vec![anon]);
+        assert_eq!(
+            admins(&format!("application:rental={anon},{mgmt}")),
+            vec![anon, mgmt]
+        );
+    }
+
+    #[test]
+    fn rental_rejects_bad_principal() {
+        assert!(parse_subnet_kind("application:rental=not-a-principal").is_err());
+    }
+
+    #[test]
+    fn rental_rejects_missing_equals() {
+        // Anything other than an exact "application:rental" or "application:rental=..." is rejected.
+        assert!(parse_subnet_kind("application:rentalx").is_err());
+    }
+
+    #[test]
+    fn other_kinds_and_unknown() {
+        assert!(matches!(
+            parse_subnet_kind("system").unwrap(),
+            SubnetKind::System
+        ));
+        assert!(matches!(
+            parse_subnet_kind("verified-application").unwrap(),
+            SubnetKind::VerifiedApplication
+        ));
+        assert!(parse_subnet_kind("nonsense").is_err());
+    }
 }

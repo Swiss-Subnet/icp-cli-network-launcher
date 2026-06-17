@@ -809,10 +809,11 @@ dependencies = [
 
 [[package]]
 name = "icp-cli-network-launcher"
-version = "14.0.0-2026-06-12-04-52"
+version = "14.0.0-2026-06-12-04-52.ssn1"
 dependencies = [
  "anyhow",
  "camino",
+ "candid",
  "clap",
  "hex",
  "ic_principal",
