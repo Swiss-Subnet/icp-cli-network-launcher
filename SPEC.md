@@ -62,3 +62,11 @@ When the launcher receives the signal `SIGINT` (or `CTRL_C_EVENT` on Windows), i
 The `status.json` file has an additional optional field: `supported_features` of type []string, a list of capabilities that the active launcher supports. This array is for features where the caller must change its behavior based on whether or not the launcher understood a particular flag. Callers must not reject unknown reported features.
 
 There is only one reported feature right now: `"custom-domains"`. This string should be added to the array when the gateway supports custom domains from `--custom-domains-file`. This permits callers to know what format of URL to display.
+
+## Fork extensions (Swiss Subnet)
+
+These are additions in this fork, not part of the upstream interface. They are backwards compatible: an upstream launcher treats an unknown `--subnet` value as an error, so callers that rely on them should target this fork.
+
+### Flags
+
+* `--subnet=application:rental[=<PRINCIPAL>[,<PRINCIPAL>...]]`: Adds an application subnet that models a rental subnet. Its cycles cost schedule is set to `Free` (canisters on it burn no cycles), and the given principals are registered as the subnet's `SubnetRecord.subnet_admins`. Subnet admins are granted management authority over every canister on the subnet, including the `canister_metrics` management endpoint, without being per-canister controllers. The principal list is optional and may be empty (`--subnet=application:rental`), which yields a `Free` subnet with no admins. This value is repeatable and composes with plain `--subnet=application` subnets in the same network, so fee-charging and free subnets can coexist. Each `application:rental` value carries its own admin list independently.

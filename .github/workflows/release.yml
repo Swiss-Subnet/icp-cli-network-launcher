@@ -111,12 +111,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ghcr repository names must be lowercase; github.repository may contain uppercase.
+      - name: "Lowercase image name"
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: "Docker metadata"
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
           images: |
-            ghcr.io/${{ github.repository }}
+            ${{ env.IMAGE }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -146,20 +150,20 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
           tags: |
-            ghcr.io/${{ github.repository }}:${{ matrix.arch_tag }}
+            ${{ env.IMAGE }}:${{ matrix.arch_tag }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:${{ matrix.cache_suffix }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:${{ matrix.cache_suffix }}
           # Written by main only. Refreshing it weekly on tag left the 3-minute
           # `cargo chef cook` layer missing on every PR, and letting PRs write it
           # would let one poison what a release is built from. A tag adds nothing
           # main has not cached already.
-          cache-to: ${{ github.event_name == 'push' && github.ref_name == 'main' && format('type=registry,ref=ghcr.io/{0}:{1},mode=max', github.repository, matrix.cache_suffix) || '' }}
+          cache-to: ${{ github.event_name == 'push' && github.ref_name == 'main' && format('type=registry,ref={0}:{1},mode=max', env.IMAGE, matrix.cache_suffix) || '' }}
 
       # Building an image only proves it compiles; #78 shipped because nothing
       # ever ran one. Runnable locally too — see the script's header.
       - name: "Smoke test the ${{ matrix.arch_tag }} image"
         if: ${{ github.ref_type != 'tag' }}
-        run: ./scripts/smoke-test-image.sh "ghcr.io/${{ github.repository }}:${{ matrix.arch_tag }}"
+        run: ./scripts/smoke-test-image.sh "${{ env.IMAGE }}:${{ matrix.arch_tag }}"
 
   aggregate:
     name: build:required
@@ -227,12 +231,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ghcr repository names must be lowercase; github.repository may contain uppercase.
+      - name: "Lowercase image name"
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: "Docker metadata"
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
           images: |
-            ghcr.io/${{ github.repository }}
+            ${{ env.IMAGE }}
           tags: ${{ matrix.tags }}
 
       - name: "Log in to GitHub Container Registry"
@@ -247,30 +255,5 @@ jobs:
         with:
           tags: ${{ steps.meta.outputs.tags }}
           sources: |
-            ghcr.io/${{ github.repository }}:${{ matrix.amd64_tag }}
-            ghcr.io/${{ github.repository }}:${{ matrix.arm64_tag }}
-
-  bump-icp-cli:
-    name: Bump network-launcher in icp-cli
-    if: ${{ github.ref_type == 'tag' }}
-    needs: [release, docker-manifest]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger bump-network-launcher workflow
-        # Rotating ICP_CLI_DISPATCH_PAT (fine-grained PAT, max 1y expiry).
-        # This PAT only dispatches INTO dfinity/icp-cli; the reverse direction
-        # uses a separate PAT stored in that repo.
-        #   1. github.com -> Settings -> Developer settings -> Personal access tokens
-        #      -> Fine-grained tokens -> Generate new token.
-        #   2. Resource owner: dfinity. Repository access: only dfinity/icp-cli.
-        #   3. Repository permissions: Actions = Read and write
-        #      (Metadata: Read is auto-added).
-        #   4. Update the ICP_CLI_DISPATCH_PAT secret in
-        #      dfinity/icp-cli-network-launcher.
-        env:
-          GH_TOKEN: ${{ secrets.ICP_CLI_DISPATCH_PAT }}
-        run: |
-          gh workflow run bump-network-launcher.yml \
-            --repo dfinity/icp-cli \
-            --ref main \
-            --field version="${{ github.ref_name }}"
+            ${{ env.IMAGE }}:${{ matrix.amd64_tag }}
+            ${{ env.IMAGE }}:${{ matrix.arm64_tag }}

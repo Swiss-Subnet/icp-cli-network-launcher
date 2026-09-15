@@ -46,7 +46,9 @@ Subnets fall into two independent categories:
 - **fiduciary** — mirrors the mainnet topology.
 - **test-threshold-keys** — provides `test_key_1` and `dfx_test_key` for all threshold algorithms (ECDSA, Schnorr, and VetKd).
 
-**Workload subnets** — selected with the `--subnet` flag. Available types: `application`, `system`, `verified-application`, `bitcoin`, `sns`.
+**Workload subnets** — selected with the `--subnet` flag. Available types: `application`, `application:rental`, `system`, `verified-application`, `bitcoin`, `sns`.
+
+`application:rental[=<principal>[,<principal>...]]` creates an application subnet that models a rental subnet: its cost schedule is **Free** (canisters burn no cycles) and the listed principals are registered as the subnet's `SubnetRecord.subnet_admins`. Subnet admins are granted management authority over every canister on the subnet, including the `canister_metrics` management endpoint, without being per-canister controllers. The principal list may be empty (`--subnet=application:rental`), giving a Free subnet with no admins.
 
 **Default behavior:**
 - With no `--subnet` flags: one **application** subnet is created (in addition to the base topology).
@@ -68,6 +70,12 @@ icp-cli-network-launcher --subnet=system --subnet=application
 
 # Only system (no application subnet!) + NNS + fiduciary + TestThresholdKeys
 icp-cli-network-launcher --subnet=system
+
+# Rental application subnet (Free, no admins) alongside a normal-fee application subnet
+icp-cli-network-launcher --subnet=application --subnet=application:rental
+
+# Rental application subnet granting two principals subnet-admin authority
+icp-cli-network-launcher --subnet=application:rental=aaaaa-aa,2vxsx-fae
 ```
 
 ### Internet Identity
